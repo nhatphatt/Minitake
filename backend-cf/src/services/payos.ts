@@ -98,3 +98,22 @@ export async function verifyWebhookSignature(body: Record<string, any>, checksum
 	const computed = await signData(data, checksumKey);
 	return computed === signature;
 }
+
+export async function getPaymentStatus(config: PayOSConfig, orderCode: number | string): Promise<{ paid: boolean; transactionId?: string }> {
+	try {
+		const response = await fetch(`${PAYOS_API_URL}/v2/payment-requests/${orderCode}`, {
+			method: 'GET',
+			headers: {
+				'x-client-id': config.clientId,
+				'x-api-key': config.apiKey,
+			},
+		});
+		const result = await response.json() as any;
+		if (result.code === '00' && result.data?.status === 'PAID') {
+			return { paid: true, transactionId: result.data?.transactionId };
+		}
+		return { paid: false };
+	} catch {
+		return { paid: false };
+	}
+}

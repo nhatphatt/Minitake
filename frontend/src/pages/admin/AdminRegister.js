@@ -12,7 +12,6 @@ import {
   EyeOff,
   ArrowRight,
   ArrowLeft,
-  ChefHat,
   Check,
   Crown,
   Zap,
@@ -78,7 +77,6 @@ const AdminRegister = () => {
       gradient: "from-emerald-600 to-teal-600",
       bg: "bg-emerald-50",
       border: "border-emerald-200",
-      badge: "Phổ biến",
     },
   ];
 
@@ -475,9 +473,6 @@ const AdminRegister = () => {
         />
 
         <div className="relative z-10 text-white max-w-md">
-          <div className="w-16 h-16 bg-white/10 backdrop-blur-sm rounded-2xl flex items-center justify-center mb-8 border border-white/20">
-            <ChefHat className="w-8 h-8" />
-          </div>
           <h1 className="text-4xl font-bold mb-4 leading-tight">
             Bắt đầu kinh doanh <span className="text-emerald-200">thông minh</span> hơn
           </h1>
@@ -524,9 +519,6 @@ const AdminRegister = () => {
         <div className="w-full max-w-lg">
           {/* Mobile logo */}
           <div className="lg:hidden flex items-center gap-3 mb-6">
-            <div className="w-10 h-10 bg-emerald-600 rounded-xl flex items-center justify-center">
-              <ChefHat className="w-5 h-5 text-white" />
-            </div>
             <span className="text-xl font-bold text-gray-900">Minitake</span>
           </div>
 

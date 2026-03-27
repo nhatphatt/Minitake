@@ -63,7 +63,8 @@ app.get('/current', authMiddleware, async (c) => {
 		'SELECT COUNT(*) as cnt FROM tables WHERE store_id = ?'
 	).bind(storeId).first<{ cnt: number }>();
 
-	const maxTables = (subscription.max_tables as number) || 10;
+	const isPro = subscription.plan_id === 'pro';
+	const maxTables = isPro ? null : ((subscription.max_tables as number) || 10);
 	const current = tableCount?.cnt || 0;
 	const features = plan?.features ? JSON.parse(plan.features as string) : {};
 

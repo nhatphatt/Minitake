@@ -152,7 +152,7 @@ const SubscriptionManagement = () => {
                 <span className="text-sm">Số bàn</span>
               </div>
               <p className="font-semibold text-slate-900">
-                {subscription?.table_usage?.current || 0} / {subscription?.table_usage?.limit || 10}
+                {subscription?.table_usage?.current || 0} / {subscription?.table_usage?.limit != null ? subscription.table_usage.limit : 'Không giới hạn'}
               </p>
             </div>
           </div>

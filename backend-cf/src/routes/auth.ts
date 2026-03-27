@@ -3,6 +3,7 @@ import type { Env } from '../types';
 import { authMiddleware } from '../middleware/auth';
 import { generateId, hashPassword, verifyPassword } from '../utils/crypto';
 import { createToken } from '../middleware/auth';
+import { getPaymentStatus } from '../services/payos';
 
 const app = new Hono<{ Bindings: Env; Variables: { user: any } }>();
 
@@ -192,8 +193,26 @@ app.post('/auth/register/complete', async (c) => {
 		if (pendingReg.status === 'cancelled') return c.json({ detail: 'Registration was cancelled' }, 400);
 
 		// Check payment status
-		const payment = await env.DB.prepare('SELECT * FROM subscription_payments WHERE id = ?').bind(pendingReg.payment_id).first();
-		if (!payment || (payment as any).status !== 'paid') {
+		const payment = await env.DB.prepare('SELECT * FROM subscription_payments WHERE payment_id = ?').bind(pendingReg.payment_id).first() as any;
+		if (!payment) {
+			return c.json({ detail: 'Payment record not found' }, 400);
+		}
+
+		// If webhook hasn't arrived yet, verify payment directly with PayOS
+		if (payment.status !== 'paid' && payment.payos_order_id) {
+			const payosStatus = await getPaymentStatus(
+				{ clientId: env.PAYOS_CLIENT_ID, apiKey: env.PAYOS_API_KEY, checksumKey: env.PAYOS_CHECKSUM_KEY },
+				payment.payos_order_id
+			);
+			if (payosStatus.paid) {
+				await env.DB.prepare(
+					'UPDATE subscription_payments SET status = ?, payos_transaction_id = ?, updated_at = ? WHERE payment_id = ?'
+				).bind('paid', payosStatus.transactionId || '', new Date().toISOString(), payment.payment_id).run();
+				payment.status = 'paid';
+			}
+		}
+
+		if (payment.status !== 'paid') {
 			return c.json({ detail: 'Payment not completed' }, 400);
 		}
 
@@ -216,7 +235,7 @@ app.post('/auth/register/complete', async (c) => {
 
 		// Create subscription
 		await env.DB.prepare(
-			`INSERT INTO subscriptions (id, store_id, plan_id, status, current_period_start, current_period_end, created_at, updated_at)
+			`INSERT INTO subscriptions (subscription_id, store_id, plan_id, status, current_period_start, current_period_end, created_at, updated_at)
 			 VALUES (?, ?, 'pro', 'active', ?, ?, ?, ?)`
 		).bind(subscriptionId, storeId, now, periodEnd, now, now).run();
 
@@ -224,7 +243,7 @@ app.post('/auth/register/complete', async (c) => {
 		await env.DB.prepare('UPDATE stores SET subscription_id = ? WHERE id = ?').bind(subscriptionId, storeId).run();
 
 		// Update payment with store_id
-		await env.DB.prepare('UPDATE subscription_payments SET store_id = ? WHERE id = ?').bind(storeId, pendingReg.payment_id).run();
+		await env.DB.prepare('UPDATE subscription_payments SET store_id = ? WHERE payment_id = ?').bind(storeId, pendingReg.payment_id).run();
 
 		// Create user
 		await env.DB.prepare(
@@ -391,9 +410,14 @@ app.post('/auth/check-availability', async (c) => {
 
 // Alias for frontend compatibility
 app.post('/auth/complete-registration', async (c) => {
+	const body = await c.req.json();
 	const url = new URL(c.req.url);
-	url.pathname = url.pathname.replace('/complete-registration', '/register/complete');
-	const newReq = new Request(url.toString(), c.req.raw);
+	url.pathname = '/auth/register/complete';
+	const newReq = new Request(url.toString(), {
+		method: 'POST',
+		headers: c.req.raw.headers,
+		body: JSON.stringify(body),
+	});
 	return app.fetch(newReq, c.env, c.executionCtx);
 });
 

@@ -10,7 +10,6 @@ import {
   BarChart3,
   Warehouse,
   Check,
-  ChefHat,
   Menu,
   X,
   Zap,
@@ -45,20 +44,26 @@ const HomePage = () => {
             className="flex items-center gap-2.5 cursor-pointer"
             onClick={() => navigate("/")}
           >
-            <div className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center">
-              <ChefHat className="w-4 h-4 text-white" />
-            </div>
             <span className="text-xl font-bold text-gray-900">Minitake</span>
           </div>
 
           <div className="hidden md:flex items-center gap-8 text-sm font-medium text-gray-500">
-            <a href="#features" className="hover:text-gray-900 transition-colors">
+            <a
+              href="#features"
+              className="hover:text-gray-900 transition-colors"
+            >
               Tính năng
             </a>
-            <a href="#how-it-works" className="hover:text-gray-900 transition-colors">
+            <a
+              href="#how-it-works"
+              className="hover:text-gray-900 transition-colors"
+            >
               Cách hoạt động
             </a>
-            <a href="#pricing" className="hover:text-gray-900 transition-colors">
+            <a
+              href="#pricing"
+              className="hover:text-gray-900 transition-colors"
+            >
               Bảng giá
             </a>
           </div>
@@ -83,26 +88,49 @@ const HomePage = () => {
             className="md:hidden text-gray-600"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
           >
-            {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+            {mobileMenuOpen ? (
+              <X className="w-6 h-6" />
+            ) : (
+              <Menu className="w-6 h-6" />
+            )}
           </button>
         </div>
 
         {mobileMenuOpen && (
           <div className="md:hidden bg-white border-t border-gray-100 px-6 py-4 space-y-3">
-            <a href="#features" className="block text-gray-600 py-2" onClick={() => setMobileMenuOpen(false)}>
+            <a
+              href="#features"
+              className="block text-gray-600 py-2"
+              onClick={() => setMobileMenuOpen(false)}
+            >
               Tính năng
             </a>
-            <a href="#how-it-works" className="block text-gray-600 py-2" onClick={() => setMobileMenuOpen(false)}>
+            <a
+              href="#how-it-works"
+              className="block text-gray-600 py-2"
+              onClick={() => setMobileMenuOpen(false)}
+            >
               Cách hoạt động
             </a>
-            <a href="#pricing" className="block text-gray-600 py-2" onClick={() => setMobileMenuOpen(false)}>
+            <a
+              href="#pricing"
+              className="block text-gray-600 py-2"
+              onClick={() => setMobileMenuOpen(false)}
+            >
               Bảng giá
             </a>
             <div className="flex gap-3 pt-2">
-              <Button variant="outline" className="flex-1" onClick={() => navigate("/admin/login")}>
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => navigate("/admin/login")}
+              >
                 Đăng nhập
               </Button>
-              <Button className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => navigate("/admin/register")}>
+              <Button
+                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                onClick={() => navigate("/admin/register")}
+              >
                 Dùng thử
               </Button>
             </div>
@@ -138,8 +166,8 @@ const HomePage = () => {
           </h1>
 
           <p className="text-lg sm:text-xl text-gray-500 max-w-2xl mx-auto mb-10 leading-relaxed">
-            Menu QR cho từng bàn, chatbot AI tự động đặt món,
-            thanh toán online, báo cáo doanh thu realtime — tất cả trong một nền tảng.
+            Menu QR cho từng bàn, chatbot AI tự động đặt món, thanh toán online,
+            báo cáo doanh thu realtime — tất cả trong một nền tảng.
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -174,7 +202,8 @@ const HomePage = () => {
               Mọi thứ bạn cần để vận hành quán
             </h2>
             <p className="text-gray-500 text-lg max-w-2xl mx-auto">
-              Từ nhận đơn đến báo cáo, Minitake giúp bạn số hóa toàn bộ quy trình.
+              Từ nhận đơn đến báo cáo, Minitake giúp bạn số hóa toàn bộ quy
+              trình.
             </p>
           </div>
 
@@ -223,7 +252,9 @@ const HomePage = () => {
                   key={i}
                   className="bg-white rounded-2xl p-6 border border-gray-100 hover:border-gray-200 hover:shadow-lg transition-all duration-300 group"
                 >
-                  <div className={`w-12 h-12 rounded-xl ${f.color} flex items-center justify-center mb-4 group-hover:scale-110 transition-transform`}>
+                  <div
+                    className={`w-12 h-12 rounded-xl ${f.color} flex items-center justify-center mb-4 group-hover:scale-110 transition-transform`}
+                  >
                     <Icon className="w-6 h-6" />
                   </div>
                   <h3 className="text-lg font-semibold mb-2 text-gray-900">
@@ -274,7 +305,9 @@ const HomePage = () => {
                   {s.step}
                 </div>
                 <h3 className="font-semibold text-lg mb-2">{s.title}</h3>
-                <p className="text-gray-500 text-sm leading-relaxed">{s.desc}</p>
+                <p className="text-gray-500 text-sm leading-relaxed">
+                  {s.desc}
+                </p>
               </div>
             ))}
           </div>
@@ -317,7 +350,10 @@ const HomePage = () => {
                   "Báo cáo cơ bản",
                   "Thanh toán tiền mặt",
                 ].map((f, i) => (
-                  <li key={i} className="flex items-center gap-2.5 text-sm text-gray-600">
+                  <li
+                    key={i}
+                    className="flex items-center gap-2.5 text-sm text-gray-600"
+                  >
                     <Check className="w-4 h-4 text-emerald-500 flex-shrink-0" />
                     {f}
                   </li>
@@ -363,7 +399,10 @@ const HomePage = () => {
                   "Báo cáo nâng cao",
                   "Hỗ trợ ưu tiên 24/7",
                 ].map((f, i) => (
-                  <li key={i} className="flex items-center gap-2.5 text-sm text-emerald-50">
+                  <li
+                    key={i}
+                    className="flex items-center gap-2.5 text-sm text-emerald-50"
+                  >
                     <Check className="w-4 h-4 text-emerald-300 flex-shrink-0" />
                     {f}
                   </li>
@@ -407,7 +446,10 @@ const HomePage = () => {
                   "Hỗ trợ ưu tiên 24/7",
                   "Tùy chỉnh thương hiệu",
                 ].map((f, i) => (
-                  <li key={i} className="flex items-center gap-2.5 text-sm text-gray-600">
+                  <li
+                    key={i}
+                    className="flex items-center gap-2.5 text-sm text-gray-600"
+                  >
                     <Check className="w-4 h-4 text-emerald-500 flex-shrink-0" />
                     {f}
                   </li>
@@ -433,8 +475,8 @@ const HomePage = () => {
             Sẵn sàng số hóa quán của bạn?
           </h2>
           <p className="text-gray-500 text-lg mb-8 max-w-xl mx-auto">
-            Đăng ký miễn phí, thiết lập trong 5 phút.
-            Không cần thẻ tín dụng, không ràng buộc.
+            Đăng ký miễn phí, thiết lập trong 5 phút. Không cần thẻ tín dụng,
+            không ràng buộc.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button
@@ -459,19 +501,22 @@ const HomePage = () => {
       <footer className="border-t border-gray-100 py-12 px-6">
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
           <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 bg-emerald-600 rounded-lg flex items-center justify-center">
-              <ChefHat className="w-3.5 h-3.5 text-white" />
-            </div>
             <span className="font-bold text-gray-900">Minitake</span>
           </div>
           <p className="text-sm text-gray-400">
             © 2026 Minitake. Nền tảng quản lý F&B thông minh.
           </p>
           <div className="flex gap-6 text-sm text-gray-400">
-            <a href="#features" className="hover:text-gray-600 transition-colors">
+            <a
+              href="#features"
+              className="hover:text-gray-600 transition-colors"
+            >
               Tính năng
             </a>
-            <a href="#pricing" className="hover:text-gray-600 transition-colors">
+            <a
+              href="#pricing"
+              className="hover:text-gray-600 transition-colors"
+            >
               Bảng giá
             </a>
             <button

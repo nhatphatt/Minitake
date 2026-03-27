@@ -71,7 +71,7 @@ app.post('/payos', async (c) => {
 
 			// Update payment status
 			await c.env.DB.prepare(
-				'UPDATE subscription_payments SET status = ?, transaction_id = ?, updated_at = ? WHERE payment_id = ?'
+				'UPDATE subscription_payments SET status = ?, payos_transaction_id = ?, updated_at = ? WHERE payment_id = ?'
 			).bind('paid', transactionId, now, payment.payment_id).run();
 
 			// If subscription upgrade, activate the subscription
