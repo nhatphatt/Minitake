@@ -1,19 +1,132 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { authMiddleware } from '../middleware/auth';
-import { generateId, hashPassword, verifyPassword } from '../utils/crypto';
+import { generateId, hashPassword, verifyPassword, generateOtp, hashOtp } from '../utils/crypto';
 import { createToken } from '../middleware/auth';
 import { getPaymentStatus } from '../services/payos';
+import { sendSmsOtp } from '../services/esms';
+import { sendEmailOtp } from '../services/resend';
 
 const app = new Hono<{ Bindings: Env; Variables: { user: any } }>();
+
+// POST /auth/send-otp
+app.post('/auth/send-otp', async (c) => {
+	const body = await c.req.json();
+	const { identifier, method } = body;
+
+	if (!identifier || !method) return c.json({ detail: 'Missing identifier or method' }, 400);
+	if (method !== 'email' && method !== 'sms') return c.json({ detail: 'Method must be email or sms' }, 400);
+
+	// Basic format validation
+	if (method === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifier)) {
+		return c.json({ detail: 'Invalid email format' }, 400);
+	}
+	if (method === 'sms' && !/^(0|\+84|84)\d{9}$/.test(identifier.replace(/\s/g, ''))) {
+		return c.json({ detail: 'Invalid Vietnamese phone number' }, 400);
+	}
+
+	try {
+		const env = c.env;
+		const now = new Date();
+
+		// Rate limit: block if a valid OTP was sent within the last 60 seconds
+		const recent = await env.DB.prepare(
+			`SELECT created_at FROM otp_verifications
+			 WHERE identifier = ? AND method = ? AND is_verified = 0
+			 ORDER BY created_at DESC LIMIT 1`
+		).bind(identifier, method).first() as any;
+
+		if (recent) {
+			const sentAt = new Date(recent.created_at);
+			const secondsAgo = (now.getTime() - sentAt.getTime()) / 1000;
+			if (secondsAgo < 60) {
+				return c.json({ detail: `Vui lòng chờ ${Math.ceil(60 - secondsAgo)} giây trước khi gửi lại` }, 429);
+			}
+		}
+
+		const otp = generateOtp();
+		const otpHash = await hashOtp(otp);
+		const expiresAt = new Date(now.getTime() + 10 * 60 * 1000).toISOString();
+		const id = generateId();
+
+		await env.DB.prepare(
+			`INSERT INTO otp_verifications (id, identifier, method, otp_hash, is_verified, expires_at, created_at)
+			 VALUES (?, ?, ?, ?, 0, ?, ?)`
+		).bind(id, identifier, method, otpHash, expiresAt, now.toISOString()).run();
+
+		let sendError: string | undefined;
+		if (method === 'email') {
+			const emailResult = await sendEmailOtp(
+				{ apiKey: env.RESEND_API_KEY, fromEmail: env.RESEND_FROM_EMAIL },
+				identifier,
+				otp
+			);
+			sendError = emailResult.success ? undefined : 'Gửi email thất bại, vui lòng thử lại';
+		} else {
+			const smsResult = await sendSmsOtp(
+				{ apiKey: env.ESMS_API_KEY, secretKey: env.ESMS_SECRET_KEY, brandname: env.ESMS_BRANDNAME },
+				identifier,
+				otp
+			);
+			sendError = smsResult.success ? undefined : 'Gửi SMS thất bại, vui lòng thử lại';
+		}
+
+		if (sendError) {
+			await env.DB.prepare('DELETE FROM otp_verifications WHERE id = ?').bind(id).run();
+			return c.json({ detail: sendError }, 500);
+		}
+
+		return c.json({ success: true, expires_in: 600 });
+	} catch (e: any) {
+		return c.json({ detail: e.message || 'Send OTP failed' }, 500);
+	}
+});
+
+// POST /auth/verify-otp
+app.post('/auth/verify-otp', async (c) => {
+	const body = await c.req.json();
+	const { identifier, method, otp_code } = body;
+
+	if (!identifier || !method || !otp_code) return c.json({ detail: 'Missing required fields' }, 400);
+
+	try {
+		const env = c.env;
+		const now = new Date().toISOString();
+
+		const record = await env.DB.prepare(
+			`SELECT * FROM otp_verifications
+			 WHERE identifier = ? AND method = ? AND is_verified = 0 AND expires_at > ?
+			 ORDER BY created_at DESC LIMIT 1`
+		).bind(identifier, method, now).first() as any;
+
+		if (!record) return c.json({ detail: 'Mã OTP không hợp lệ hoặc đã hết hạn' }, 400);
+
+		const inputHash = await hashOtp(otp_code.trim());
+		if (inputHash !== record.otp_hash) {
+			return c.json({ detail: 'Mã OTP không đúng' }, 400);
+		}
+
+		await env.DB.prepare(
+			`UPDATE otp_verifications SET is_verified = 1 WHERE id = ?`
+		).bind(record.id).run();
+
+		return c.json({ verified_token: record.id });
+	} catch (e: any) {
+		return c.json({ detail: e.message || 'Verify OTP failed' }, 500);
+	}
+});
 
 // POST /auth/register
 app.post('/auth/register', async (c) => {
 	const body = await c.req.json();
-	const { email, password, name, store_name, store_slug, plan_id = 'starter' } = body;
+	const { email, password, phone, name, store_name, store_slug, plan_id = 'starter', verified_token } = body;
 
-	if (!email || !password || !name || !store_name || !store_slug) {
+	if (!email || !password || !phone || !name || !store_name || !store_slug) {
 		return c.json({ detail: 'Missing required fields' }, 400);
+	}
+
+	if (!verified_token) {
+		return c.json({ detail: 'OTP verification required' }, 400);
 	}
 
 	// Validate password strength
@@ -29,16 +142,34 @@ app.post('/auth/register', async (c) => {
 
 	try {
 		const env = c.env;
+		const now = new Date().toISOString();
+
+		// Validate verified_token against DB
+		const otpRecord = await env.DB.prepare(
+			`SELECT * FROM otp_verifications WHERE id = ? AND is_verified = 1 AND expires_at > ?`
+		).bind(verified_token, now).first() as any;
+
+		if (!otpRecord) {
+			return c.json({ detail: 'OTP verification invalid or expired' }, 400);
+		}
+		if (otpRecord.identifier !== email && otpRecord.identifier !== phone) {
+			return c.json({ detail: 'OTP was not issued for this email or phone' }, 400);
+		}
+
+		// Consume the token so it cannot be reused
+		await env.DB.prepare('DELETE FROM otp_verifications WHERE id = ?').bind(verified_token).run();
 
 		// Check email exists
-		const existingUser = await env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(email).first();
-		if (existingUser) return c.json({ detail: 'Email already registered' }, 400);
+		const existingUserEmail = await env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(email).first();
+		if (existingUserEmail) return c.json({ detail: 'Email already registered' }, 400);
+
+		const existingUserPhone = await env.DB.prepare('SELECT id FROM users WHERE phone_number = ?').bind(phone).first();
+		if (existingUserPhone) return c.json({ detail: 'Phone number already registered'}, 400)
 
 		// Check slug exists
 		const existingStore = await env.DB.prepare('SELECT id FROM stores WHERE slug = ?').bind(store_slug).first();
 		if (existingStore) return c.json({ detail: 'Store slug already taken' }, 400);
 
-		const now = new Date().toISOString();
 		const storeId = generateId();
 		const userId = generateId();
 		const passwordHash = await hashPassword(password);
@@ -78,9 +209,9 @@ app.post('/auth/register', async (c) => {
 
 		// Create user
 		await env.DB.prepare(
-			`INSERT INTO users (id, email, password_hash, name, role, store_id, created_at)
+			`INSERT INTO users (id, email, password_hash, phone_number, name, role, store_id, created_at)
 			 VALUES (?, ?, ?, ?, 'admin', ?, ?)`
-		).bind(userId, email, passwordHash, name, storeId, now).run();
+		).bind(userId, email, passwordHash, phone, name, storeId, now).run();
 
 		// Create token
 		const token = await createToken({ sub: userId, email, role: 'admin', store_id: storeId }, env.JWT_SECRET);
@@ -411,7 +542,7 @@ app.post('/auth/check-availability', async (c) => {
 // Alias for frontend compatibility
 app.post('/auth/complete-registration', async (c) => {
 	const body = await c.req.json();
-	const url = new URL(c.req.url);
+	const url = new (globalThis as any).URL(c.req.url);
 	url.pathname = '/auth/register/complete';
 	const newReq = new Request(url.toString(), {
 		method: 'POST',

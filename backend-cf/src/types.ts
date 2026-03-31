@@ -10,6 +10,9 @@ export type Env = {
 	PAYOS_CHECKSUM_KEY: string;
 	RESEND_API_KEY: string;
 	RESEND_FROM_EMAIL: string;
+	ESMS_API_KEY: string;
+	ESMS_SECRET_KEY: string;
+	ESMS_BRANDNAME: string;
 	WEBHOOK_SECRET: string;
 	PRO_PLAN_PRICE: string;
 	STARTER_MAX_TABLES: string;
@@ -21,6 +24,7 @@ export interface User {
 	email: string;
 	name: string;
 	password_hash: string;
+	phone: string;
 	role: string;
 	store_id: string;
 	created_at: string;

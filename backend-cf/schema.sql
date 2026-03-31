@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS users (
   email TEXT NOT NULL UNIQUE,
   password_hash TEXT NOT NULL,
   name TEXT NOT NULL,
+  phone_number TEXT NOT NULL UNIQUE,
   role TEXT NOT NULL DEFAULT 'admin',
   store_id TEXT NOT NULL,
   created_at TEXT NOT NULL
@@ -354,11 +355,24 @@ CREATE TABLE IF NOT EXISTS subscription_payments (
   FOREIGN KEY (subscription_id) REFERENCES subscriptions(subscription_id)
 );
 
+-- ============ OTP VERIFICATIONS ============
+
+CREATE TABLE IF NOT EXISTS otp_verifications (
+  id TEXT PRIMARY KEY,
+  identifier TEXT NOT NULL,         -- email or phone number
+  method TEXT NOT NULL,             -- 'email' or 'sms'
+  otp_hash TEXT NOT NULL,
+  is_verified INTEGER NOT NULL DEFAULT 0,
+  expires_at TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
 -- ============ INDEXES ============
 
 -- Users
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_users_store_id ON users(store_id);
+CREATE INDEX IF NOT EXISTS idx_users_phone ON users(phone_number);
 
 -- Stores
 CREATE INDEX IF NOT EXISTS idx_stores_slug ON stores(slug);
@@ -444,4 +458,8 @@ CREATE INDEX IF NOT EXISTS idx_pending_reg_payment ON pending_registrations(paym
 
 -- Super Admins
 CREATE INDEX IF NOT EXISTS idx_super_admins_email ON super_admins(email);
+
+-- OTP Verifications
+CREATE INDEX IF NOT EXISTS idx_otp_identifier ON otp_verifications(identifier, method);
+CREATE INDEX IF NOT EXISTS idx_otp_expires ON otp_verifications(expires_at);
 

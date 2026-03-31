@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import React, { useState, useEffect } from "react";
+import { useNavigate, Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,7 +10,18 @@ import { Loader2, Eye, EyeOff, ArrowRight } from "lucide-react";
 
 const AdminLogin = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get("registered") === "true") {
+      toast.success("Đăng ký thành công! Hãy đăng nhập để bắt đầu.", {
+        duration: 5000,
+      });
+      window.history.replaceState({}, "", "/admin/login");
+    }
+  }, []);
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({ email: "", password: "" });
 

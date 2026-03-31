@@ -6,6 +6,8 @@ compatibility_flags = ["nodejs_compat"]
 [vars]
 ENVIRONMENT = "production"
 FRONTEND_URL = "https://minitake-app.pages.dev"
+ESMS_BRANDNAME = "Minitake"
+# Secrets below must be set via: wrangler secret put ESMS_API_KEY / ESMS_SECRET_KEY
 
 [[d1_databases]]
 binding = "DB"

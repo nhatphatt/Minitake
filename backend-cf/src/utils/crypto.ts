@@ -34,3 +34,14 @@ export async function verifyPassword(password: string, storedHash: string): Prom
 export function generateId(): string {
 	return crypto.randomUUID();
 }
+
+export function generateOtp(): string {
+	const arr = crypto.getRandomValues(new Uint8Array(3));
+	return (((arr[0] << 16) | (arr[1] << 8) | arr[2]) % 900000 + 100000).toString();
+}
+
+export async function hashOtp(otp: string): Promise<string> {
+	const data = new TextEncoder().encode(otp);
+	const hash = await crypto.subtle.digest('SHA-256', data);
+	return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
