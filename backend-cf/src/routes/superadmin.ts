@@ -282,24 +282,171 @@ app.get('/payments', superAdminAuth, async (c) => {
 	}
 });
 
-// GET /revenue
-app.get('/revenue', superAdminAuth, async (c) => {
+// GET /finance/revenue
+app.get('/finance/revenue', superAdminAuth, async (c) => {
 	try {
+		const db = c.env.DB;
 		const period = c.req.query('period') || 'month';
+		const startParam = c.req.query('start');
+		const endParam = c.req.query('end');
+
+		// Build time-series grouping and window
 		let groupBy: string;
-		if (period === 'year') {
-			groupBy = "strftime('%Y', created_at)";
-		} else {
+		let windowFilter: string;
+		let windowFilterPrev: string;
+		let limit = 12;
+		const now = new Date();
+
+		if (period === 'day') {
+			groupBy = "strftime('%Y-%m-%d', created_at)";
+			const from = new Date(now); from.setUTCDate(from.getUTCDate() - 29); from.setUTCHours(0,0,0,0);
+			const prevFrom = new Date(from); prevFrom.setUTCDate(prevFrom.getUTCDate() - 30);
+			windowFilter = `created_at >= '${from.toISOString()}'`;
+			windowFilterPrev = `created_at >= '${prevFrom.toISOString()}' AND created_at < '${from.toISOString()}'`;
+			limit = 30;
+		} else if (period === 'week') {
+			groupBy = "strftime('%Y-W%W', created_at)";
+			const from = new Date(now); from.setUTCDate(from.getUTCDate() - 83); from.setUTCHours(0,0,0,0);
+			const prevFrom = new Date(from); prevFrom.setUTCDate(prevFrom.getUTCDate() - 84);
+			windowFilter = `created_at >= '${from.toISOString()}'`;
+			windowFilterPrev = `created_at >= '${prevFrom.toISOString()}' AND created_at < '${from.toISOString()}'`;
+			limit = 12;
+		} else if (period === 'month') {
 			groupBy = "strftime('%Y-%m', created_at)";
+			const from = new Date(now); from.setUTCMonth(from.getUTCMonth() - 11); from.setUTCDate(1); from.setUTCHours(0,0,0,0);
+			const prevFrom = new Date(from); prevFrom.setUTCMonth(prevFrom.getUTCMonth() - 12);
+			windowFilter = `created_at >= '${from.toISOString()}'`;
+			windowFilterPrev = `created_at >= '${prevFrom.toISOString()}' AND created_at < '${from.toISOString()}'`;
+			limit = 12;
+		} else if (period === 'quarter') {
+			groupBy = "strftime('%Y', created_at) || '-Q' || CAST((CAST(strftime('%m', created_at) AS INTEGER) + 2) / 3 AS TEXT)";
+			const from = new Date(now); from.setUTCMonth(from.getUTCMonth() - 23); from.setUTCDate(1); from.setUTCHours(0,0,0,0);
+			const prevFrom = new Date(from); prevFrom.setUTCMonth(prevFrom.getUTCMonth() - 24);
+			windowFilter = `created_at >= '${from.toISOString()}'`;
+			windowFilterPrev = `created_at >= '${prevFrom.toISOString()}' AND created_at < '${from.toISOString()}'`;
+			limit = 8;
+		} else if (period === 'year') {
+			groupBy = "strftime('%Y', created_at)";
+			const from = new Date(now); from.setUTCFullYear(from.getUTCFullYear() - 4); from.setUTCMonth(0); from.setUTCDate(1); from.setUTCHours(0,0,0,0);
+			const prevFrom = new Date(from); prevFrom.setUTCFullYear(prevFrom.getUTCFullYear() - 5);
+			windowFilter = `created_at >= '${from.toISOString()}'`;
+			windowFilterPrev = `created_at >= '${prevFrom.toISOString()}' AND created_at < '${from.toISOString()}'`;
+			limit = 5;
+		} else if (period === 'range' && startParam && endParam) {
+			groupBy = "strftime('%Y-%m-%d', created_at)";
+			const start = new Date(startParam); start.setUTCHours(0,0,0,0);
+			const end = new Date(endParam); end.setUTCHours(23,59,59,999);
+			const rangeDays = Math.ceil((end.getTime() - start.getTime()) / 86400000);
+			const prevStart = new Date(start.getTime() - rangeDays * 86400000);
+			windowFilter = `created_at >= '${start.toISOString()}' AND created_at <= '${end.toISOString()}'`;
+			windowFilterPrev = `created_at >= '${prevStart.toISOString()}' AND created_at < '${start.toISOString()}'`;
+			limit = 366;
+		} else {
+			return c.json({ detail: 'Invalid period. Use: day, week, month, quarter, year, range' }, 400);
 		}
 
-		const { results } = await c.env.DB.prepare(
-			`SELECT ${groupBy} as period_key, SUM(amount) as total_amount, COUNT(*) as payment_count FROM subscription_payments WHERE status = 'paid' GROUP BY period_key ORDER BY period_key DESC LIMIT 12`
-		).all();
+		const [timeSeries, summary, summaryPrev, byPlan] = await Promise.all([
+			db.prepare(
+				`SELECT ${groupBy} as period_key, SUM(amount) as total_amount, COUNT(*) as payment_count
+				 FROM subscription_payments WHERE ${windowFilter}
+				 GROUP BY period_key ORDER BY period_key ASC LIMIT ${limit}`
+			).all(),
+			db.prepare(
+				`SELECT
+					COALESCE(SUM(CASE WHEN status = 'paid' THEN amount ELSE 0 END), 0) as total_revenue,
+					COUNT(*) as total_transactions,
+					SUM(CASE WHEN status = 'paid' THEN 1 ELSE 0 END) as paid_count,
+					SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending_count,
+					SUM(CASE WHEN status NOT IN ('paid','pending') THEN 1 ELSE 0 END) as failed_count
+				 FROM subscription_payments WHERE ${windowFilter}`
+			).first<any>(),
+			db.prepare(
+				`SELECT COALESCE(SUM(CASE WHEN status = 'paid' THEN amount ELSE 0 END), 0) as total_revenue
+				 FROM subscription_payments WHERE ${windowFilterPrev}`
+			).first<any>(),
+			db.prepare(
+				`SELECT sp.plan_id, COALESCE(SUM(sub.amount), 0) as total, COUNT(*) as count
+				 FROM subscription_payments sub
+				 LEFT JOIN subscriptions sp ON sp.subscription_id = sub.subscription_id
+				 WHERE sub.status = 'paid' AND sub.${windowFilter}
+				 GROUP BY sp.plan_id`
+			).all().catch(() => ({ results: [] })),
+		]);
 
-		return c.json({ period, data: results || [] });
+		const currentRevenue = summary?.total_revenue || 0;
+		const prevRevenue = summaryPrev?.total_revenue || 0;
+		const growthPct = prevRevenue > 0 ? ((currentRevenue - prevRevenue) / prevRevenue) * 100 : null;
+
+		return c.json({
+			period,
+			summary: {
+				total_revenue: currentRevenue,
+				total_transactions: summary?.total_transactions || 0,
+				paid_count: summary?.paid_count || 0,
+				pending_count: summary?.pending_count || 0,
+				failed_count: summary?.failed_count || 0,
+				growth_pct: growthPct !== null ? Math.round(growthPct * 10) / 10 : null,
+			},
+			breakdown_by_plan: byPlan.results || [],
+			data: timeSeries.results || [],
+		});
 	} catch (e: any) {
-		return c.json({ detail: 'Failed to get revenue data' }, 500);
+		return c.json({ detail: 'Failed to get revenue data: ' + e.message }, 500);
+	}
+});
+
+// GET /finance/transactions
+app.get('/finance/transactions', superAdminAuth, async (c) => {
+	try {
+		const db = c.env.DB;
+		const page = parseInt(c.req.query('page') || '1');
+		const limit = parseInt(c.req.query('limit') || '20');
+		const offset = (page - 1) * limit;
+		const status = c.req.query('status');
+		const search = c.req.query('search');
+		const sort = c.req.query('sort') === 'asc' ? 'ASC' : 'DESC';
+
+		const conditions: string[] = [];
+		const binds: any[] = [];
+
+		if (status) {
+			conditions.push('sp.status = ?');
+			binds.push(status);
+		}
+		if (search) {
+			conditions.push('(s.name LIKE ? OR u.email LIKE ?)');
+			binds.push(`%${search}%`, `%${search}%`);
+		}
+
+		const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
+
+		const baseJoin = `FROM subscription_payments sp
+			LEFT JOIN stores s ON s.id = sp.store_id
+			LEFT JOIN users u ON u.store_id = sp.store_id`;
+
+		const [totalRow, rows] = await Promise.all([
+			db.prepare(`SELECT COUNT(*) as cnt ${baseJoin} ${where}`).bind(...binds).first<{ cnt: number }>(),
+			db.prepare(
+				`SELECT sp.*,
+					s.name as store_name,
+					s.slug as store_slug,
+					s.plan_id,
+					u.email as owner_email
+				 ${baseJoin} ${where}
+				 ORDER BY sp.created_at ${sort}
+				 LIMIT ? OFFSET ?`
+			).bind(...binds, limit, offset).all(),
+		]);
+
+		return c.json({
+			transactions: rows.results || [],
+			total: totalRow?.cnt || 0,
+			page,
+			limit,
+			total_pages: Math.ceil((totalRow?.cnt || 0) / limit),
+		});
+	} catch (e: any) {
+		return c.json({ detail: 'Failed to get transactions: ' + e.message }, 500);
 	}
 });
 
@@ -468,5 +615,6 @@ app.put('/stores/:store_id/downgrade-starter', superAdminAuth, async (c) => {
 		return c.json({ detail: e.message || 'Failed to downgrade store' }, 500);
 	}
 });
+
 
 export default app;

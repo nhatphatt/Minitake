@@ -24,6 +24,8 @@ import PaymentsManagement from "@/pages/admin/PaymentsManagement";
 import SuperAdminDashboard from "@/pages/admin/SuperAdminDashboard";
 import SuperAdminUsers from "@/pages/admin/SuperAdminUsers";
 import SuperAdminStoreDetail from "@/pages/admin/SuperAdminStoreDetail";
+import SuperAdminFinanceRevenue from "@/pages/admin/SuperAdminFinanceRevenue";
+import SuperAdminFinanceTransactions from "@/pages/admin/SuperAdminFinanceTransactions";
 import AdminLayout from "@/components/AdminLayout";
 import SuperAdminLayout from "@/components/SuperAdminLayout";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -85,6 +87,8 @@ function App() {
             <Route path="dashboard" element={<SuperAdminDashboard />} />
             <Route path="users" element={<SuperAdminUsers />} />
             <Route path="stores/:storeId" element={<SuperAdminStoreDetail />} />
+            <Route path="finance/revenue" element={<SuperAdminFinanceRevenue />} />
+            <Route path="finance/transactions" element={<SuperAdminFinanceTransactions />} />
           </Route>
           <Route path="/super-admin/login" element={<Navigate to="/admin/login" replace />} />
         </Routes>

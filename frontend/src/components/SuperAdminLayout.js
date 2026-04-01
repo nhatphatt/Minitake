@@ -1,23 +1,35 @@
-import React from "react";
+import React, { useState } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
-import { Home, Store, CreditCard, BarChart3, Layers, Users, Settings, LogOut, Crown } from "lucide-react";
+import { Home, Users, LogOut, DollarSign, BarChart3, ArrowRightLeft, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { removeAuthToken, removeAuthUser, getAuthUser } from "@/utils/auth";
-
-const navItems = [
-  { id: "overview", label: "Tổng quan", icon: Home, path: "/super-admin/dashboard" },
-  { id: "users", label: "Quản lý Users", icon: Users, path: "/super-admin/users" },
-];
 
 const SuperAdminLayout = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const user = getAuthUser();
+  const isFinancePath = location.pathname.startsWith("/super-admin/finance");
+  const [financeOpen, setFinanceOpen] = useState(isFinancePath);
 
   const handleLogout = () => {
     removeAuthToken();
     removeAuthUser();
     navigate("/admin/login");
+  };
+
+  const navBtn = (path, Icon, label) => {
+    const isActive = location.pathname === path;
+    return (
+      <button
+        onClick={() => navigate(path)}
+        className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
+          isActive ? "bg-violet-500/20 text-violet-300" : "text-slate-400 hover:bg-slate-700/50"
+        }`}
+      >
+        <Icon className="w-5 h-5" />
+        {label}
+      </button>
+    );
   };
 
   return (
@@ -32,24 +44,49 @@ const SuperAdminLayout = () => {
         </div>
 
         <nav className="px-4 space-y-1">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = location.pathname === item.path;
-            return (
-              <button
-                key={item.id}
-                onClick={() => navigate(item.path)}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-                  isActive
-                    ? "bg-violet-500/20 text-violet-300"
-                    : "text-slate-400 hover:bg-slate-700/50"
-                }`}
-              >
-                <Icon className="w-5 h-5" />
-                {item.label}
-              </button>
-            );
-          })}
+          {navBtn("/super-admin/dashboard", Home, "Tổng quan")}
+          {navBtn("/super-admin/users", Users, "Quản lý Users")}
+
+          {/* Finance dropdown */}
+          <div>
+            <button
+              onClick={() => setFinanceOpen((o) => !o)}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
+                isFinancePath ? "bg-violet-500/20 text-violet-300" : "text-slate-400 hover:bg-slate-700/50"
+              }`}
+            >
+              <DollarSign className="w-5 h-5" />
+              <span className="flex-1 text-left">Tài chính</span>
+              <ChevronDown className={`w-4 h-4 transition-transform ${financeOpen ? "rotate-180" : ""}`} />
+            </button>
+
+            {financeOpen && (
+              <div className="ml-4 mt-1 space-y-1 border-l border-slate-700/50 pl-3">
+                <button
+                  onClick={() => navigate("/super-admin/finance/revenue")}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all ${
+                    location.pathname === "/super-admin/finance/revenue"
+                      ? "bg-violet-500/20 text-violet-300"
+                      : "text-slate-400 hover:bg-slate-700/50"
+                  }`}
+                >
+                  <BarChart3 className="w-4 h-4" />
+                  Doanh thu
+                </button>
+                <button
+                  onClick={() => navigate("/super-admin/finance/transactions")}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all ${
+                    location.pathname === "/super-admin/finance/transactions"
+                      ? "bg-violet-500/20 text-violet-300"
+                      : "text-slate-400 hover:bg-slate-700/50"
+                  }`}
+                >
+                  <ArrowRightLeft className="w-4 h-4" />
+                  Giao dịch
+                </button>
+              </div>
+            )}
+          </div>
         </nav>
 
         <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-slate-700/50">
