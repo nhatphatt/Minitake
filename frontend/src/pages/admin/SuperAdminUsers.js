@@ -9,7 +9,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow
 } from "@/components/ui/table";
 import {
-  Search, Users, UserX, Trash2, RefreshCw, Shield, Mail, Calendar, Building, Crown, ArrowDownCircle
+  Search, Users, Trash2, RefreshCw, Shield, Mail, Calendar, Building, Crown, ArrowDownCircle
 } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/utils/api";
@@ -76,18 +76,6 @@ const SuperAdminUsers = () => {
       fetchUsers();
     } catch (error) {
       toast.error(error.response?.data?.detail || "Không thể xóa user");
-    }
-  };
-
-  const handleToggleStatus = async (userId, currentStatus) => {
-    try {
-      const newStatus = currentStatus === "active" ? "inactive" : "active";
-      await api.put(`/super-admin/users/${userId}/status`, { status: newStatus });
-      const action = newStatus === "active" ? "kích hoạt" : "vô hiệu hóa";
-      toast.success(`Đã ${action} user`);
-      fetchUsers();
-    } catch (error) {
-      toast.error(error.response?.data?.detail || "Không thể cập nhật trạng thái");
     }
   };
 
@@ -182,7 +170,7 @@ const SuperAdminUsers = () => {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         <Card className="bg-slate-800/50 border-slate-700/50">
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
@@ -209,32 +197,7 @@ const SuperAdminUsers = () => {
             </div>
           </CardContent>
         </Card>
-        <Card className="bg-slate-800/50 border-slate-700/50">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center">
-                <Users className="w-5 h-5 text-emerald-400" />
-              </div>
-              <div>
-                <p className="text-sm text-slate-400">Hoạt động</p>
-                <p className="text-2xl font-bold text-white">{users.filter(u => u.status === "active").length}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="bg-slate-800/50 border-slate-700/50">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-slate-500/20 flex items-center justify-center">
-                <UserX className="w-5 h-5 text-slate-400" />
-              </div>
-              <div>
-                <p className="text-sm text-slate-400">Vô hiệu hóa</p>
-                <p className="text-2xl font-bold text-white">{users.filter(u => u.status === "inactive").length}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        
       </div>
 
       {/* Users Table */}

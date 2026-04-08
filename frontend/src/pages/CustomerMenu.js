@@ -391,11 +391,29 @@ const CustomerMenu = () => {
     toast.info("Đơn hàng đã được tạo. Bạn có thể thanh toán sau tại quầy.");
   };
 
+  // Auto-retry khi bàn chưa mở — poll mỗi 5 giây
+  useEffect(() => {
+    if (!tableClosed || !tableId) return;
+    const interval = setInterval(async () => {
+      try {
+        const response = await axios.get(`${API_BASE}/tables/${tableId}`);
+        if (response.data.status === "occupied") {
+          setTableClosed(false);
+          setTableInfo(response.data);
+          setCustomerInfo((prev) => ({
+            ...prev,
+            table_number: response.data.table_number,
+          }));
+        }
+      } catch {}
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [tableClosed, tableId]);
+
   const filteredItems =
     selectedCategory === "all"
       ? menuItems
       : menuItems.filter((item) => item.category_id === selectedCategory);
-
 
   if (!store) {
     return (
@@ -416,6 +434,10 @@ const CustomerMenu = () => {
           <p className="text-muted-foreground text-sm">
             Vui lòng nhờ nhân viên mở bàn trước khi quét mã QR để gọi món.
           </p>
+          <div className="mt-4 flex items-center justify-center gap-2 text-xs text-muted-foreground">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            Đang chờ nhân viên mở bàn...
+          </div>
         </div>
       </div>
     );
@@ -921,6 +943,10 @@ const CustomerMenu = () => {
             tableId={tableId}
             cart={cart}
             onAddToCart={addToCart}
+            onRemoveFromCart={(name) => {
+              const item = cart.find((i) => i.name.toLowerCase() === name.toLowerCase());
+              if (item) removeFromCart(item.id);
+            }}
             onCheckout={() => setCheckoutOpen(true)}
           />
         </div>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import axios from "axios";
-import { MessageCircle, X, Send, Loader2, ShoppingCart } from "lucide-react";
+import { MessageCircle, X, Send, Loader2, ShoppingCart, Mic, MicOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -15,6 +15,7 @@ const ChatbotWidget = ({
   tableId,
   cart,
   onAddToCart,
+  onRemoveFromCart,
   onCheckout,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -22,7 +23,47 @@ const ChatbotWidget = ({
   const [inputMessage, setInputMessage] = useState("");
   const [sessionId, setSessionId] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const recognitionRef = useRef(null);
   const messagesEndRef = useRef(null);
+
+  // Speech Recognition setup
+  const startListening = useCallback(() => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      toast.error("Trình duyệt không hỗ trợ giọng nói");
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = "vi-VN";
+    recognition.continuous = false;
+    recognition.interimResults = true;
+
+    recognition.onstart = () => setIsListening(true);
+
+    recognition.onresult = (event) => {
+      const transcript = Array.from(event.results)
+        .map((r) => r[0].transcript)
+        .join("");
+      setInputMessage(transcript);
+
+      if (event.results[0].isFinal) {
+        setIsListening(false);
+      }
+    };
+
+    recognition.onerror = () => setIsListening(false);
+    recognition.onend = () => setIsListening(false);
+
+    recognitionRef.current = recognition;
+    recognition.start();
+  }, []);
+
+  const stopListening = useCallback(() => {
+    recognitionRef.current?.stop();
+    setIsListening(false);
+  }, []);
 
   // Auto scroll to bottom when new message arrives
   const scrollToBottom = () => {
@@ -84,6 +125,8 @@ const ChatbotWidget = ({
               price: action.item.price,
               image_url: action.item.image_url,
             }, action.item.quantity || 1);
+          } else if (action.type === "remove_from_cart" && onRemoveFromCart) {
+            onRemoveFromCart(action.item.name);
           } else if (action.type === "open_checkout" && onCheckout) {
             setTimeout(() => onCheckout(), 500);
           }
@@ -324,7 +367,6 @@ const ChatbotWidget = ({
                 {[
                   "📋 Cho tôi xem menu",
                   "🍴 Gợi ý món ngon",
-                  "💰 Có khuyến mãi gì không?",
                   "🛒 Xem giỏ hàng",
                 ].map((prompt, idx) => (
                   <button
@@ -349,10 +391,19 @@ const ChatbotWidget = ({
                 type="text"
                 value={inputMessage}
                 onChange={(e) => setInputMessage(e.target.value)}
-                placeholder="Nhập tin nhắn..."
-                className="flex-1"
+                placeholder={isListening ? "Đang nghe..." : "Nhập tin nhắn..."}
+                className={`flex-1 ${isListening ? "border-red-400 ring-1 ring-red-300" : ""}`}
                 disabled={isLoading}
               />
+              <Button
+                type="button"
+                onClick={isListening ? stopListening : startListening}
+                disabled={isLoading}
+                variant={isListening ? "destructive" : "outline"}
+                className={isListening ? "animate-pulse" : "text-gray-500 hover:text-emerald-600"}
+              >
+                {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+              </Button>
               <Button
                 type="submit"
                 disabled={!inputMessage.trim() || isLoading}

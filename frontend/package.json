@@ -60,7 +60,7 @@
   "scripts": {
     "start": "craco start",
     "dev": "craco start",
-    "build": "craco build",
+    "build": "craco build && node -e \"require('fs').copyFileSync('build/index.html','build/404.html')\"",
     "test": "craco test"
   },
   "browserslist": {

@@ -71,9 +71,28 @@ function formatMenuForPrompt(menuItems: any[]): string {
 
 // ─── System Prompt ───
 
-function buildSystemPrompt(menuItems: any[]): string {
+function buildSystemPrompt(menuItems: any[], context?: Record<string, any>): string {
 	const menuText = formatMenuForPrompt(menuItems);
+	const timeOfDay = context?.time_of_day || 'unknown';
+	const timeLabels: Record<string, string> = {
+		breakfast: 'Buổi sáng (6h-11h)',
+		lunch: 'Buổi trưa (11h-14h)',
+		afternoon: 'Buổi chiều (14h-17h)',
+		dinner: 'Buổi tối (17h-21h)',
+		late_night: 'Đêm khuya (21h-6h)',
+	};
+	const timeHint: Record<string, string> = {
+		breakfast: 'Ưu tiên gợi ý món trong menu phù hợp buổi sáng (đồ uống, đồ ăn nhẹ).',
+		lunch: 'Ưu tiên gợi ý món trong menu phù hợp buổi trưa (món chính, no bụng).',
+		afternoon: 'Ưu tiên gợi ý món trong menu phù hợp buổi chiều (đồ uống giải khát, ăn vặt).',
+		dinner: 'Ưu tiên gợi ý món trong menu phù hợp buổi tối (món chính, đồ uống đi kèm).',
+		late_night: 'Ưu tiên gợi ý món trong menu phù hợp đêm khuya (nhẹ nhàng, ấm).',
+	};
+
 	return `Bạn là Minitake Bot — trợ lý đặt món AI của quán.
+
+⏰ THỜI GIAN HIỆN TẠI: ${timeLabels[timeOfDay] || timeOfDay}
+${timeHint[timeOfDay] ? `💡 GỢI Ý THEO THỜI GIAN: ${timeHint[timeOfDay]}` : ''}
 
 ═══ MENU CỦA QUÁN (ĐÂY LÀ TOÀN BỘ MENU) ═══
 ${menuText}
@@ -81,13 +100,15 @@ ${menuText}
 
 QUY TẮC BẮT BUỘC:
 1. CHỈ ĐƯỢC nhắc đến các món CÓ TRONG MENU ở trên. TUYỆT ĐỐI KHÔNG được tự bịa, tưởng tượng, hay nhắc bất kỳ món nào không có trong danh sách. Nếu menu trống, nói "Quán hiện chưa có món nào trong menu".
-2. Khi khách hỏi gợi ý → chỉ gợi ý từ menu trên. Nếu khách muốn món không có → nói "Xin lỗi, quán hiện chưa có món đó" và gợi ý món tương tự từ menu.
+2. Khi khách hỏi gợi ý → ưu tiên gợi ý món PHÙ HỢP VỚI THỜI GIAN hiện tại từ menu trên. Nếu khách muốn món không có → nói "Xin lỗi, quán hiện chưa có món đó" và gợi ý món tương tự từ menu.
 3. Khi khách muốn đặt món → xác nhận tên món chính xác từ menu, hỏi số lượng, rồi nói "Mình đã thêm [món] vào giỏ hàng!"
+3b. Khi khách muốn bỏ/xóa món khỏi giỏ hàng → xác nhận tên món và nói "Đã bỏ [món] khỏi giỏ hàng!"
 4. Khi khách muốn thanh toán → xác nhận giỏ hàng và hướng dẫn nhấn nút "Thanh toán" bên dưới.
 5. Trả lời ngắn gọn (tối đa 3-4 câu). Dùng emoji vừa phải.
 6. Giao tiếp tiếng Việt tự nhiên, thân thiện.
 7. Khi liệt kê món, LUÔN kèm giá.
-8. Nếu có món khuyến mãi, ưu tiên gợi ý món đó.`;
+8. CHỈ nhắc đến khuyến mãi nếu trong menu ở trên CÓ tag [KM:...]. Nếu KHÔNG có món nào có tag [KM:...] thì TUYỆT ĐỐI KHÔNG được nhắc đến khuyến mãi, ưu đãi, hay giảm giá.
+9. Khi chào khách hoặc khách hỏi gợi ý mà KHÔNG nói rõ muốn gì, hãy tự nhiên gợi ý 2-3 món phù hợp thời gian hiện tại. CHỈ ĐƯỢC chọn từ MENU ở trên, TUYỆT ĐỐI KHÔNG bịa tên món.`;
 }
 
 // ─── Public API ───
@@ -101,7 +122,7 @@ export async function generateAIResponse(
 	conversationHistory: ConvMessage[],
 	ai?: any
 ): Promise<string> {
-	const system = buildSystemPrompt(menuItems);
+	const system = buildSystemPrompt(menuItems, context);
 
 	let userPrompt = '';
 

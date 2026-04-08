@@ -4,17 +4,28 @@ import { authMiddleware } from '../middleware/auth';
 import { generateId, hashPassword, verifyPassword } from '../utils/crypto';
 import { createToken } from '../middleware/auth';
 import { getPaymentStatus } from '../services/payos';
+import { compactPhone, isValidVietnamesePhone } from '../services/esms';
 
 const app = new Hono<{ Bindings: Env; Variables: { user: any } }>();
+
+async function isPhoneTaken(env: Env, phone: string) {
+	const normalizedPhone = compactPhone(phone);
+	const existingUser = await env.DB.prepare('SELECT id FROM users WHERE phone_number = ?').bind(normalizedPhone).first();
+	if (existingUser) return true;
+	const existingPending = await env.DB.prepare("SELECT pending_id FROM pending_registrations WHERE phone_number = ? AND status != 'cancelled'").bind(normalizedPhone).first();
+	return !!existingPending;
+}
 
 // POST /auth/register
 app.post('/auth/register', async (c) => {
 	const body = await c.req.json();
-	const { email, password, name, store_name, store_slug, plan_id = 'starter' } = body;
+	const { email, phone, password, name, store_name, store_slug, plan_id = 'starter' } = body;
 
-	if (!email || !password || !name || !store_name || !store_slug) {
+	if (!email || !phone || !password || !name || !store_name || !store_slug) {
 		return c.json({ detail: 'Missing required fields' }, 400);
 	}
+
+	if (!isValidVietnamesePhone(phone)) return c.json({ detail: 'Số điện thoại không hợp lệ' }, 400);
 
 	// Validate password strength
 	if (password.length < 8) return c.json({ detail: 'Mật khẩu phải có ít nhất 8 ký tự' }, 400);
@@ -33,6 +44,7 @@ app.post('/auth/register', async (c) => {
 		// Check email exists
 		const existingUser = await env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(email).first();
 		if (existingUser) return c.json({ detail: 'Email already registered' }, 400);
+		if (await isPhoneTaken(env, phone)) return c.json({ detail: 'Số điện thoại đã được sử dụng' }, 400);
 
 		// Check slug exists
 		const existingStore = await env.DB.prepare('SELECT id FROM stores WHERE slug = ?').bind(store_slug).first();
@@ -81,6 +93,7 @@ app.post('/auth/register', async (c) => {
 			`INSERT INTO users (id, email, password_hash, name, role, store_id, created_at)
 			 VALUES (?, ?, ?, ?, 'admin', ?, ?)`
 		).bind(userId, email, passwordHash, name, storeId, now).run();
+		await env.DB.prepare('UPDATE users SET phone_number = ? WHERE id = ?').bind(compactPhone(phone), userId).run();
 
 		// Create token
 		const token = await createToken({ sub: userId, email, role: 'admin', store_id: storeId }, env.JWT_SECRET);
@@ -98,11 +111,13 @@ app.post('/auth/register', async (c) => {
 // POST /auth/register/initiate - Initiate pro registration with payment
 app.post('/auth/register/initiate', async (c) => {
 	const body = await c.req.json();
-	const { plan_id = 'pro', store_name, store_slug, buyer_email, buyer_name, password } = body;
+	const { plan_id = 'pro', store_name, store_slug, buyer_email, buyer_phone, buyer_name, password } = body;
 
-	if (!store_name || !store_slug || !buyer_email || !buyer_name || !password) {
+	if (!store_name || !store_slug || !buyer_email || !buyer_phone || !buyer_name || !password) {
 		return c.json({ detail: 'Missing required fields' }, 400);
 	}
+
+	if (!isValidVietnamesePhone(buyer_phone)) return c.json({ detail: 'Số điện thoại không hợp lệ' }, 400);
 
 	if (plan_id !== 'pro') {
 		return c.json({ detail: 'Only PRO plan requires payment' }, 400);
@@ -118,6 +133,7 @@ app.post('/auth/register/initiate', async (c) => {
 		// Check email and slug
 		const existingUser = await env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(buyer_email).first();
 		if (existingUser) return c.json({ detail: 'Email already registered' }, 400);
+		if (await isPhoneTaken(env, buyer_phone)) return c.json({ detail: 'Số điện thoại đã được sử dụng' }, 400);
 
 		const existingStore = await env.DB.prepare('SELECT id FROM stores WHERE slug = ?').bind(store_slug).first();
 		if (existingStore) return c.json({ detail: 'Store slug already taken' }, 400);
@@ -134,9 +150,9 @@ app.post('/auth/register/initiate', async (c) => {
 
 		// Create pending registration
 		await env.DB.prepare(
-			`INSERT INTO pending_registrations (pending_id, email, password_hash, name, store_name, store_slug, plan_id, payment_id, status, created_at, expires_at)
-			 VALUES (?, ?, ?, ?, ?, ?, 'pro', ?, 'pending_payment', ?, ?)`
-		).bind(pendingId, buyer_email, passwordHash, buyer_name, store_name, store_slug, paymentId, now, expiresAt).run();
+			`INSERT INTO pending_registrations (pending_id, email, phone_number, password_hash, name, store_name, store_slug, plan_id, payment_id, status, created_at, expires_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, 'pro', ?, 'pending_payment', ?, ?)`
+		).bind(pendingId, buyer_email, compactPhone(buyer_phone), passwordHash, buyer_name, store_name, store_slug, paymentId, now, expiresAt).run();
 
 		// Create subscription payment record
 		const amount = (plan as any).price || parseInt(env.PRO_PLAN_PRICE || '0');
@@ -250,6 +266,9 @@ app.post('/auth/register/complete', async (c) => {
 			`INSERT INTO users (id, email, password_hash, name, role, store_id, created_at)
 			 VALUES (?, ?, ?, ?, 'admin', ?, ?)`
 		).bind(userId, pendingReg.email, pendingReg.password_hash, pendingReg.name, storeId, now).run();
+		if (pendingReg.phone_number) {
+			await env.DB.prepare('UPDATE users SET phone_number = ? WHERE id = ?').bind(pendingReg.phone_number, userId).run();
+		}
 
 		// Mark pending registration as completed
 		await env.DB.prepare(
@@ -384,7 +403,7 @@ app.post('/auth/super-admin/login', async (c) => {
 // POST /auth/check-availability
 app.post('/auth/check-availability', async (c) => {
 	const body = await c.req.json();
-	const { email, store_slug } = body;
+	const { email, phone, store_slug } = body;
 
 	try {
 		const env = c.env;
@@ -393,6 +412,14 @@ app.post('/auth/check-availability', async (c) => {
 		if (email) {
 			const existing = await env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(email).first();
 			if (existing) errors.push('Email already registered');
+		}
+
+		if (phone) {
+			if (!isValidVietnamesePhone(phone)) {
+				errors.push('Số điện thoại không hợp lệ');
+			} else if (await isPhoneTaken(env, phone)) {
+				errors.push('Số điện thoại đã được sử dụng');
+			}
 		}
 
 		if (store_slug) {
@@ -407,6 +434,7 @@ app.post('/auth/check-availability', async (c) => {
 		return c.json({ detail: e.message || 'Check failed' }, 500);
 	}
 });
+
 
 // Alias for frontend compatibility
 app.post('/auth/complete-registration', async (c) => {

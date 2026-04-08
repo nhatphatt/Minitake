@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import MinitakeLogo from "@/components/MinitakeLogo";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
@@ -24,6 +25,7 @@ const AdminRegister = () => {
   const [step, setStep] = useState(1);
   const [formData, setFormData] = useState({
     email: "",
+    phone: "",
     password: "",
     name: "",
     store_name: "",
@@ -91,6 +93,7 @@ const AdminRegister = () => {
     try {
       await api.post("/auth/check-availability", {
         email: formData.email,
+        phone: formData.phone,
         store_slug: formData.store_slug,
       });
       setStep(2);
@@ -119,6 +122,7 @@ const AdminRegister = () => {
             store_name: formData.store_name,
             store_slug: formData.store_slug,
             buyer_email: formData.email,
+            buyer_phone: formData.phone,
             buyer_name: formData.name,
             password: formData.password,
           }
@@ -138,7 +142,9 @@ const AdminRegister = () => {
   const registerUser = async () => {
     setLoading(true);
     try {
-      const response = await api.post("/auth/register", { ...formData });
+      const response = await api.post("/auth/register", {
+        ...formData,
+      });
       setAuthToken(response.data.access_token);
       setAuthUser(response.data.user);
       toast.success("Đăng ký thành công!");
@@ -199,9 +205,24 @@ const AdminRegister = () => {
             type="email"
             placeholder="admin@example.com"
             value={formData.email}
-            onChange={(e) =>
-              setFormData({ ...formData, email: e.target.value })
-            }
+            onChange={(e) => {
+              setFormData({ ...formData, email: e.target.value });
+            }}
+            required
+            className="h-12 bg-white border-gray-200 focus:border-emerald-500 focus:ring-emerald-500/20 rounded-xl"
+          />
+        </div>
+        <div className="space-y-2 sm:col-span-2">
+          <Label className="text-sm font-medium text-gray-700">
+            Số điện thoại
+          </Label>
+          <Input
+            type="tel"
+            placeholder="0912345678"
+            value={formData.phone}
+            onChange={(e) => {
+              setFormData({ ...formData, phone: e.target.value });
+            }}
             required
             className="h-12 bg-white border-gray-200 focus:border-emerald-500 focus:ring-emerald-500/20 rounded-xl"
           />
@@ -291,6 +312,7 @@ const AdminRegister = () => {
           </span>
         )}
       </Button>
+
     </form>
   );
 
@@ -382,6 +404,10 @@ const AdminRegister = () => {
               <span className="font-medium text-gray-900">
                 {formData.email}
               </span>
+            </div>
+            <div>
+              <span className="text-gray-500 block">Số điện thoại</span>
+              <span className="font-medium text-gray-900">{formData.phone}</span>
             </div>
             <div>
               <span className="text-gray-500 block">Cửa hàng</span>
@@ -518,8 +544,8 @@ const AdminRegister = () => {
       <div className="flex-1 flex items-center justify-center p-6 sm:p-12 bg-gray-50">
         <div className="w-full max-w-lg">
           {/* Mobile logo */}
-          <div className="lg:hidden flex items-center gap-3 mb-6">
-            <span className="text-xl font-bold text-gray-900">Minitake</span>
+          <div className="lg:hidden mb-6">
+            <MinitakeLogo size="md" />
           </div>
 
           {/* Mobile step indicator */}

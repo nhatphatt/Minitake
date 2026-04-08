@@ -135,9 +135,9 @@ app.post('/activate-trial', authMiddleware, async (c) => {
 app.post('/create-checkout-for-registration', async (c) => {
 	try {
 		const body = await c.req.json();
-		const { plan_id = 'pro', store_name, store_slug, buyer_email, buyer_name, password } = body;
+		const { plan_id = 'pro', store_name, store_slug, buyer_email, buyer_phone, buyer_name, password } = body;
 
-		if (!store_name || !store_slug || !buyer_email || !buyer_name || !password) {
+		if (!store_name || !store_slug || !buyer_email || !buyer_phone || !buyer_name || !password) {
 			return c.json({ detail: 'Missing required fields' }, 400);
 		}
 		if (plan_id !== 'pro') return c.json({ detail: 'Only PRO plan requires payment' }, 400);
@@ -147,7 +147,9 @@ app.post('/create-checkout-for-registration', async (c) => {
 
 		const existingUser = await c.env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(buyer_email).first();
 		if (existingUser) return c.json({ detail: 'Email already registered' }, 400);
-
+		const normalizedPhone = String(buyer_phone).replace(/\D/g, '').replace(/^84/, '0');
+		const existingPhone = await c.env.DB.prepare('SELECT id FROM users WHERE phone_number = ?').bind(normalizedPhone).first();
+		if (existingPhone) return c.json({ detail: 'Số điện thoại đã được sử dụng' }, 400);
 		const existingStore = await c.env.DB.prepare('SELECT id FROM stores WHERE slug = ?').bind(store_slug).first();
 		if (existingStore) return c.json({ detail: 'Store slug already taken' }, 400);
 
@@ -163,8 +165,8 @@ app.post('/create-checkout-for-registration', async (c) => {
 		const passwordHash = await hashPassword(password);
 
 		await c.env.DB.prepare(
-			'INSERT INTO pending_registrations (pending_id, email, password_hash, name, store_name, store_slug, plan_id, payment_id, status, created_at, expires_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)'
-		).bind(pendingId, buyer_email, passwordHash, buyer_name, store_name, store_slug, 'pro', paymentId, 'pending_payment', now, expiresAt).run();
+			'INSERT INTO pending_registrations (pending_id, email, phone_number, password_hash, name, store_name, store_slug, plan_id, payment_id, status, created_at, expires_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'
+		).bind(pendingId, buyer_email, normalizedPhone, passwordHash, buyer_name, store_name, store_slug, 'pro', paymentId, 'pending_payment', now, expiresAt).run();
 
 		const priceVat = (plan.price as number) || 218900;
 		await c.env.DB.prepare(
@@ -177,7 +179,7 @@ app.post('/create-checkout-for-registration', async (c) => {
 			{
 				orderCode: orderCodeNum,
 				amount: priceVat,
-				description: 'Dang ky PRO ' + store_slug,
+				description: ('DK PRO ' + store_slug).slice(0, 25),
 				buyerName: buyer_name,
 				buyerEmail: buyer_email,
 				returnUrl: c.env.FRONTEND_URL + '/admin/register?payment=success&pending_id=' + pendingId,
@@ -190,8 +192,8 @@ app.post('/create-checkout-for-registration', async (c) => {
 		}
 
 		// Update payment record with PayOS order code
-		await c.env.DB.prepare('UPDATE subscription_payments SET payos_order_id = ? WHERE payment_id = ?')
-			.bind(String(orderCodeNum), paymentId).run();
+		await c.env.DB.prepare('UPDATE subscription_payments SET payos_order_id = ?, payos_payment_link = ?, updated_at = ? WHERE payment_id = ?')
+			.bind(String(orderCodeNum), payosResult.checkout_url || null, now, paymentId).run();
 
 		return c.json({
 			success: true,
@@ -245,7 +247,7 @@ app.post('/create-checkout', authMiddleware, async (c) => {
 			{
 				orderCode: orderCodeNum,
 				amount: priceVat,
-				description: 'Nang cap PRO 1 thang',
+				description: 'Nang cap PRO',
 				buyerName: user.name || user.email,
 				buyerEmail: user.email,
 				returnUrl: c.env.FRONTEND_URL + '/admin/dashboard?payment=success',
@@ -256,6 +258,10 @@ app.post('/create-checkout', authMiddleware, async (c) => {
 		if (!payosResult.success) {
 			return c.json({ detail: 'PayOS error: ' + payosResult.error }, 500);
 		}
+
+		await c.env.DB.prepare(
+			'UPDATE subscription_payments SET payos_payment_link = ?, updated_at = ? WHERE payment_id = ?'
+		).bind(payosResult.checkout_url || null, now, paymentId).run();
 
 		return c.json({
 			success: true,

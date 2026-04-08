@@ -7,6 +7,7 @@
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   email TEXT NOT NULL UNIQUE,
+  phone_number TEXT,
   password_hash TEXT NOT NULL,
   name TEXT NOT NULL,
   role TEXT NOT NULL DEFAULT 'admin',
@@ -27,6 +28,7 @@ CREATE TABLE IF NOT EXISTS super_admins (
 CREATE TABLE IF NOT EXISTS pending_registrations (
   pending_id TEXT PRIMARY KEY,
   email TEXT NOT NULL,
+  phone_number TEXT,
   password_hash TEXT NOT NULL,
   name TEXT NOT NULL,
   store_name TEXT NOT NULL,
@@ -36,6 +38,17 @@ CREATE TABLE IF NOT EXISTS pending_registrations (
   status TEXT NOT NULL DEFAULT 'pending',
   expires_at TEXT,
   completed_at TEXT,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS registration_otps (
+  id TEXT PRIMARY KEY,
+  email TEXT NOT NULL,
+  phone TEXT NOT NULL,
+  otp_hash TEXT NOT NULL,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  verified_at TEXT,
+  expires_at TEXT NOT NULL,
   created_at TEXT NOT NULL
 );
 
@@ -441,6 +454,9 @@ CREATE INDEX IF NOT EXISTS idx_sub_payments_payos ON subscription_payments(payos
 -- Pending Registrations
 CREATE INDEX IF NOT EXISTS idx_pending_reg_email ON pending_registrations(email);
 CREATE INDEX IF NOT EXISTS idx_pending_reg_payment ON pending_registrations(payment_id);
+CREATE INDEX IF NOT EXISTS idx_users_phone ON users(phone_number);
+CREATE INDEX IF NOT EXISTS idx_pending_reg_phone ON pending_registrations(phone_number);
+CREATE INDEX IF NOT EXISTS idx_registration_otps_phone ON registration_otps(phone);
 
 -- Super Admins
 CREATE INDEX IF NOT EXISTS idx_super_admins_email ON super_admins(email);

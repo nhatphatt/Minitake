@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import MinitakeLogo from "@/components/MinitakeLogo";
 import {
   QrCode,
   ArrowRight,
@@ -44,28 +45,28 @@ const HomePage = () => {
             className="flex items-center gap-2.5 cursor-pointer"
             onClick={() => navigate("/")}
           >
-            <span className="text-xl font-bold text-gray-900">Minitake</span>
+            <MinitakeLogo size="md" />
           </div>
 
           <div className="hidden md:flex items-center gap-8 text-sm font-medium text-gray-500">
-            <a
-              href="#features"
+            <button
+              onClick={() => document.getElementById("features")?.scrollIntoView({ behavior: "smooth" })}
               className="hover:text-gray-900 transition-colors"
             >
               Tính năng
-            </a>
-            <a
-              href="#how-it-works"
+            </button>
+            <button
+              onClick={() => document.getElementById("how-it-works")?.scrollIntoView({ behavior: "smooth" })}
               className="hover:text-gray-900 transition-colors"
             >
               Cách hoạt động
-            </a>
-            <a
-              href="#pricing"
+            </button>
+            <button
+              onClick={() => document.getElementById("pricing")?.scrollIntoView({ behavior: "smooth" })}
               className="hover:text-gray-900 transition-colors"
             >
               Bảng giá
-            </a>
+            </button>
           </div>
 
           <div className="hidden md:flex items-center gap-3">
@@ -98,27 +99,24 @@ const HomePage = () => {
 
         {mobileMenuOpen && (
           <div className="md:hidden bg-white border-t border-gray-100 px-6 py-4 space-y-3">
-            <a
-              href="#features"
-              className="block text-gray-600 py-2"
-              onClick={() => setMobileMenuOpen(false)}
+            <button
+              className="block text-gray-600 py-2 w-full text-left"
+              onClick={() => { setMobileMenuOpen(false); document.getElementById("features")?.scrollIntoView({ behavior: "smooth" }); }}
             >
               Tính năng
-            </a>
-            <a
-              href="#how-it-works"
-              className="block text-gray-600 py-2"
-              onClick={() => setMobileMenuOpen(false)}
+            </button>
+            <button
+              className="block text-gray-600 py-2 w-full text-left"
+              onClick={() => { setMobileMenuOpen(false); document.getElementById("how-it-works")?.scrollIntoView({ behavior: "smooth" }); }}
             >
               Cách hoạt động
-            </a>
-            <a
-              href="#pricing"
-              className="block text-gray-600 py-2"
-              onClick={() => setMobileMenuOpen(false)}
+            </button>
+            <button
+              className="block text-gray-600 py-2 w-full text-left"
+              onClick={() => { setMobileMenuOpen(false); document.getElementById("pricing")?.scrollIntoView({ behavior: "smooth" }); }}
             >
               Bảng giá
-            </a>
+            </button>
             <div className="flex gap-3 pt-2">
               <Button
                 variant="outline"
@@ -500,25 +498,23 @@ const HomePage = () => {
       {/* ─── Footer ─── */}
       <footer className="border-t border-gray-100 py-12 px-6">
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
-          <div className="flex items-center gap-2.5">
-            <span className="font-bold text-gray-900">Minitake</span>
-          </div>
+          <MinitakeLogo size="sm" />
           <p className="text-sm text-gray-400">
             © 2026 Minitake. Nền tảng quản lý F&B thông minh.
           </p>
           <div className="flex gap-6 text-sm text-gray-400">
-            <a
-              href="#features"
+            <button
+              onClick={() => document.getElementById("features")?.scrollIntoView({ behavior: "smooth" })}
               className="hover:text-gray-600 transition-colors"
             >
               Tính năng
-            </a>
-            <a
-              href="#pricing"
+            </button>
+            <button
+              onClick={() => document.getElementById("pricing")?.scrollIntoView({ behavior: "smooth" })}
               className="hover:text-gray-600 transition-colors"
             >
               Bảng giá
-            </a>
+            </button>
             <button
               onClick={() => navigate("/admin/login")}
               className="hover:text-gray-600 transition-colors"

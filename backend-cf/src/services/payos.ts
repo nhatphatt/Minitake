@@ -101,14 +101,7 @@ export async function verifyWebhookSignature(body: Record<string, any>, checksum
 
 export async function getPaymentStatus(config: PayOSConfig, orderCode: number | string): Promise<{ paid: boolean; transactionId?: string }> {
 	try {
-		const response = await fetch(`${PAYOS_API_URL}/v2/payment-requests/${orderCode}`, {
-			method: 'GET',
-			headers: {
-				'x-client-id': config.clientId,
-				'x-api-key': config.apiKey,
-			},
-		});
-		const result = await response.json() as any;
+		const result = await getPaymentLinkDetail(config, orderCode);
 		if (result.code === '00' && result.data?.status === 'PAID') {
 			return { paid: true, transactionId: result.data?.transactionId };
 		}
@@ -116,4 +109,16 @@ export async function getPaymentStatus(config: PayOSConfig, orderCode: number | 
 	} catch {
 		return { paid: false };
 	}
+}
+
+export async function getPaymentLinkDetail(config: PayOSConfig, orderCode: number | string): Promise<any> {
+	const response = await fetch(`${PAYOS_API_URL}/v2/payment-requests/${orderCode}`, {
+		method: 'GET',
+		headers: {
+			'x-client-id': config.clientId,
+			'x-api-key': config.apiKey,
+		},
+	});
+
+	return await response.json() as any;
 }

@@ -38,8 +38,12 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      logout();
-      window.location.href = '/admin/login';
+      // Don't redirect if we're on a login/register page (login failure returns 401)
+      const isAuthPage = window.location.pathname.includes('/login') || window.location.pathname.includes('/register');
+      if (!isAuthPage) {
+        logout();
+        window.location.href = '/admin/login';
+      }
     }
     return Promise.reject(error);
   }

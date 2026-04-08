@@ -45,6 +45,11 @@ const INTENT_PATTERNS: Record<string, { priority: number; keywords: string[]; pa
 			/(một|hai|ba|\d+)\s?(ly|phần|cái|tô|đĩa|chai)/i,
 		],
 	},
+	remove_from_cart: {
+		priority: 5,
+		keywords: ['bỏ', 'xóa', 'bớt', 'hủy', 'không lấy', 'bỏ đi', 'remove', 'bỏ món', 'xóa món', 'không cần', 'không muốn'],
+		patterns: [/(bỏ|xóa|bớt|hủy|remove)/i, /không\s(lấy|cần|muốn)/i],
+	},
 	view_cart: {
 		priority: 2,
 		keywords: ['giỏ hàng', 'đã đặt', 'đơn hàng', 'xem giỏ'],
@@ -308,6 +313,49 @@ export async function processMessage(
 				];
 			}
 
+		// ─── REMOVE FROM CART ───
+		} else if (intent === 'remove_from_cart') {
+			if (!cartItems?.length) {
+				responseText = 'Giỏ hàng đang trống, không có gì để bỏ 😊';
+				suggestedActions = [
+					{ type: 'quick_reply', label: '📋 Xem menu', payload: 'xem menu' },
+				];
+			} else {
+				const lower = message.toLowerCase();
+				// Try direct name match against cart items
+				const toRemove = cartItems.filter((i: any) => lower.includes(i.name.toLowerCase()));
+
+				if (!toRemove.length && hasAI) {
+					// Fallback: use AI to parse item names from message, match against cart
+					const matched = await matchMenuItems(env.GEMINI_API_KEY, message, menuItems, env.AI);
+					const cartNameSet = new Set(cartItems.map((i: any) => i.name.toLowerCase()));
+					for (const m of matched) {
+						if (cartNameSet.has(m.name.toLowerCase())) {
+							toRemove.push({ name: m.name });
+						}
+					}
+				}
+
+				if (toRemove.length) {
+					actions = toRemove.map((m: any) => ({
+						type: 'remove_from_cart',
+						item: { name: m.name },
+					}));
+					const summary = toRemove.map((m: any) => m.name).join(', ');
+					responseText = `Đã bỏ ${summary} khỏi giỏ hàng! 🗑️`;
+					suggestedActions = [
+						{ type: 'quick_reply', label: '🛒 Xem giỏ hàng', payload: 'xem giỏ hàng' },
+						{ type: 'quick_reply', label: '📋 Xem menu', payload: 'xem menu' },
+					];
+				} else {
+					const cartList = cartItems.map((i: any) => i.name).join(', ');
+					responseText = `Mình không tìm thấy món đó trong giỏ hàng. Giỏ hàng hiện có: ${cartList}. Bạn muốn bỏ món nào?`;
+					suggestedActions = cartItems.map((i: any) => ({
+						type: 'quick_reply', label: `❌ Bỏ ${i.name}`, payload: `bỏ ${i.name}`,
+					}));
+				}
+			}
+
 		// ─── PAYMENT: Trigger checkout ───
 		} else if (intent === 'payment') {
 			if (cartItems?.length) {
@@ -354,9 +402,10 @@ export async function processMessage(
 				responseText = `📋 Menu có ${menuItems.length} món! Lướt carousel bên dưới để xem nhé:`;
 			}
 			richContent = buildMenuCarousel(menuItems.slice(0, 12));
+			const hasPromosMenu = menuItems.some(i => i.has_promotion);
 			suggestedActions = [
 				{ type: 'quick_reply', label: '🍴 Gợi ý món', payload: 'gợi ý món' },
-				{ type: 'quick_reply', label: '💰 Khuyến mãi', payload: 'có khuyến mãi gì' },
+				...(hasPromosMenu ? [{ type: 'quick_reply', label: '💰 Khuyến mãi', payload: 'có khuyến mãi gì' }] : []),
 			];
 
 		// ─── RECOMMENDATION ───
@@ -376,9 +425,10 @@ export async function processMessage(
 			);
 			const recs = mentionedItems.length ? mentionedItems.slice(0, 5) : menuItems.slice(0, 3);
 			richContent = buildMenuCarousel(recs);
+			const hasPromos = menuItems.some(i => i.has_promotion);
 			suggestedActions = [
 				{ type: 'quick_reply', label: '📋 Xem full menu', payload: 'xem menu' },
-				{ type: 'quick_reply', label: '💰 Khuyến mãi', payload: 'có khuyến mãi gì' },
+				...(hasPromos ? [{ type: 'quick_reply', label: '💰 Khuyến mãi', payload: 'có khuyến mãi gì' }] : []),
 				{ type: 'quick_reply', label: '🛒 Xem giỏ hàng', payload: 'xem giỏ hàng' },
 			];
 
@@ -408,10 +458,11 @@ export async function processMessage(
 				env.GEMINI_API_KEY, intent, message, context, menuItems, conversationHistory, env.AI
 			);
 			if (intent === 'greeting') {
+				const hasPromosGreeting = menuItems.some(i => i.has_promotion);
 				suggestedActions = [
 					{ type: 'quick_reply', label: '📋 Xem menu', payload: 'xem menu' },
 					{ type: 'quick_reply', label: '🍴 Gợi ý món', payload: 'gợi ý món' },
-					{ type: 'quick_reply', label: '💰 Khuyến mãi', payload: 'có khuyến mãi gì' },
+					...(hasPromosGreeting ? [{ type: 'quick_reply', label: '💰 Khuyến mãi', payload: 'có khuyến mãi gì' }] : []),
 				];
 			}
 		} else {

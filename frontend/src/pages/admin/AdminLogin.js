@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import MinitakeLogo from "@/components/MinitakeLogo";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
@@ -78,8 +79,8 @@ const AdminLogin = () => {
       <div className="flex-1 flex items-center justify-center p-6 sm:p-12 bg-gray-50">
         <div className="w-full max-w-md">
           {/* Mobile logo */}
-          <div className="lg:hidden flex items-center gap-3 mb-8">
-            <span className="text-xl font-bold text-gray-900">Minitake</span>
+           <div className="lg:hidden mb-8">
+            <MinitakeLogo size="md" />
           </div>
 
           <div className="mb-8">

@@ -8,6 +8,8 @@ export type Env = {
 	PAYOS_CLIENT_ID: string;
 	PAYOS_API_KEY: string;
 	PAYOS_CHECKSUM_KEY: string;
+	ESMS_API_KEY: string;
+	ESMS_SECRET_KEY: string;
 	RESEND_API_KEY: string;
 	RESEND_FROM_EMAIL: string;
 	WEBHOOK_SECRET: string;
@@ -19,6 +21,7 @@ export type Env = {
 export interface User {
 	id: string;
 	email: string;
+	phone?: string;
 	name: string;
 	password_hash: string;
 	role: string;

@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { verifyToken, createToken } from '../middleware/auth';
 import { verifyPassword, generateId } from '../utils/crypto';
+import { getPaymentLinkDetail } from '../services/payos';
 
 const app = new Hono<{ Bindings: Env; Variables: { superAdmin: any } }>();
 
@@ -280,6 +281,196 @@ app.get('/payments', superAdminAuth, async (c) => {
 	} catch (e: any) {
 		return c.json({ detail: 'Failed to get payments' }, 500);
 	}
+});
+
+// GET /payos/payments
+app.get('/payos/payments', superAdminAuth, async (c) => {
+	try {
+		const page = parseInt(c.req.query('page') || '1');
+		const limit = parseInt(c.req.query('limit') || '20');
+		const offset = (page - 1) * limit;
+		const status = c.req.query('status');
+		const search = c.req.query('search');
+
+		let where = "WHERE sp.payment_method = 'payos'";
+		const binds: any[] = [];
+
+		if (status) {
+			where += ' AND sp.status = ?';
+			binds.push(status);
+		}
+
+		if (search) {
+			where += ' AND (sp.payment_id LIKE ? OR CAST(sp.payos_order_id AS TEXT) LIKE ? OR s.name LIKE ? OR u.email LIKE ?)';
+			binds.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
+		}
+
+		const countSql = `
+			SELECT COUNT(*) as cnt
+			FROM subscription_payments sp
+			LEFT JOIN stores s ON s.id = sp.store_id
+			LEFT JOIN users u ON u.store_id = sp.store_id AND u.role = 'admin'
+			${where}
+		`;
+
+		const dataSql = `
+			SELECT
+				sp.payment_id,
+				sp.subscription_id,
+				sp.store_id,
+				sp.amount,
+				sp.payment_method,
+				sp.status,
+				sp.payos_order_id,
+				sp.payos_payment_link,
+				sp.payos_transaction_id,
+				sp.pending_registration_id,
+				sp.paid_at,
+				sp.created_at,
+				sp.updated_at,
+				s.name as store_name,
+				s.slug as store_slug,
+				u.email as owner_email,
+				u.name as owner_name
+			FROM subscription_payments sp
+			LEFT JOIN stores s ON s.id = sp.store_id
+			LEFT JOIN users u ON u.store_id = sp.store_id AND u.role = 'admin'
+			${where}
+			ORDER BY sp.created_at DESC
+			LIMIT ? OFFSET ?
+		`;
+
+		const totalRow = await c.env.DB.prepare(countSql).bind(...binds).first<{ cnt: number }>();
+		const total = totalRow?.cnt || 0;
+		const { results } = await c.env.DB.prepare(dataSql).bind(...binds, limit, offset).all();
+
+		return c.json({
+			payments: results || [],
+			total,
+			page,
+			limit,
+			total_pages: Math.ceil(total / limit),
+		});
+	} catch (e: any) {
+		return c.json({ detail: 'Failed to get PayOS payments: ' + e.message }, 500);
+	}
+});
+
+// GET /payos/payments/:payment_id
+app.get('/payos/payments/:payment_id', superAdminAuth, async (c) => {
+	try {
+		const paymentId = c.req.param('payment_id');
+		const payment = await c.env.DB.prepare(
+			`SELECT
+				sp.*,
+				s.name as store_name,
+				s.slug as store_slug,
+				u.email as owner_email,
+				u.name as owner_name
+			FROM subscription_payments sp
+			LEFT JOIN stores s ON s.id = sp.store_id
+			LEFT JOIN users u ON u.store_id = sp.store_id AND u.role = 'admin'
+			WHERE sp.payment_id = ? AND sp.payment_method = 'payos'
+			`
+		).bind(paymentId).first() as any;
+
+		if (!payment) return c.json({ detail: 'PayOS payment not found' }, 404);
+
+		return c.json(payment);
+	} catch (e: any) {
+		return c.json({ detail: 'Failed to get PayOS payment detail: ' + e.message }, 500);
+	}
+});
+
+// POST /payos/payments/:payment_id/sync
+app.post('/payos/payments/:payment_id/sync', superAdminAuth, async (c) => {
+	try {
+		const paymentId = c.req.param('payment_id');
+		const payment = await c.env.DB.prepare(
+			"SELECT * FROM subscription_payments WHERE payment_id = ? AND payment_method = 'payos'"
+		).bind(paymentId).first() as any;
+
+		if (!payment) return c.json({ detail: 'PayOS payment not found' }, 404);
+		if (!payment.payos_order_id) return c.json({ detail: 'PayOS order id not found' }, 400);
+
+		const payosResult = await getPaymentLinkDetail(
+			{ clientId: c.env.PAYOS_CLIENT_ID, apiKey: c.env.PAYOS_API_KEY, checksumKey: c.env.PAYOS_CHECKSUM_KEY },
+			payment.payos_order_id
+		);
+
+		if (payosResult.code !== '00') {
+			return c.json({ detail: payosResult.desc || payosResult.message || 'PayOS sync failed' }, 400);
+		}
+
+		const payosData = payosResult.data || {};
+		const now = new Date().toISOString();
+		const nextStatus = payosData.status === 'PAID' ? 'paid' : payment.status;
+
+		// Extract transaction ID: webhook uses transactionId, GET API uses transactions[0].reference
+		const txnId = payosData.transactionId
+			|| (Array.isArray(payosData.transactions) && payosData.transactions.length > 0
+				? (payosData.transactions[0].reference || payosData.transactions[0].transactionId || payosData.transactions[0].id)
+				: null)
+			|| payment.payos_transaction_id
+			|| null;
+
+		// Extract paid time from transactions array or fallback
+		const txnTime = Array.isArray(payosData.transactions) && payosData.transactions.length > 0
+			? payosData.transactions[0].transactionDateTime
+			: null;
+		const paidAt = payosData.status === 'PAID' ? (txnTime || payosData.paidAt || payment.paid_at || now) : payment.paid_at;
+
+		await c.env.DB.prepare(
+			'UPDATE subscription_payments SET status = ?, payos_transaction_id = ?, payos_payment_link = ?, paid_at = ?, updated_at = ? WHERE payment_id = ?'
+		).bind(
+			nextStatus,
+			txnId,
+			payosData.checkoutUrl || payment.payos_payment_link || null,
+			paidAt,
+			now,
+			paymentId
+		).run();
+
+		if (payosData.status === 'PAID' && payment.subscription_id) {
+			await c.env.DB.prepare(
+				"UPDATE subscriptions SET plan_id = 'pro', status = 'active', updated_at = ? WHERE subscription_id = ?"
+			).bind(now, payment.subscription_id).run();
+
+			if (payment.store_id) {
+				await c.env.DB.prepare(
+					"UPDATE stores SET plan_id = 'pro', subscription_status = 'active', updated_at = ? WHERE id = ?"
+				).bind(now, payment.store_id).run();
+			}
+		}
+
+		if (payosData.status === 'PAID' && payment.pending_registration_id) {
+			await c.env.DB.prepare(
+				"UPDATE pending_registrations SET status = 'payment_completed', completed_at = ? WHERE pending_id = ?"
+			).bind(now, payment.pending_registration_id).run();
+		}
+
+		return c.json({
+			success: true,
+			payment_id: paymentId,
+			local_status: nextStatus,
+			payos_status: payosData.status || null,
+			transaction_id: txnId,
+			paid_at: paidAt,
+			checkout_url: payosData.checkoutUrl || payment.payos_payment_link || null,
+		});
+	} catch (e: any) {
+		return c.json({ detail: 'Failed to sync PayOS payment: ' + e.message }, 500);
+	}
+});
+
+// GET /payos/config
+app.get('/payos/config', superAdminAuth, async (c) => {
+	return c.json({
+		configured: Boolean(c.env.PAYOS_CLIENT_ID && c.env.PAYOS_API_KEY && c.env.PAYOS_CHECKSUM_KEY),
+		client_id_configured: Boolean(c.env.PAYOS_CLIENT_ID),
+		api_key_configured: Boolean(c.env.PAYOS_API_KEY),
+		checksum_key_configured: Boolean(c.env.PAYOS_CHECKSUM_KEY),
+	});
 });
 
 // GET /revenue
